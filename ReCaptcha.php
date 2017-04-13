@@ -10,6 +10,7 @@ namespace himiklab\yii2\recaptcha;
 use Yii;
 use yii\base\InvalidConfigException;
 use yii\helpers\Html;
+use yii\helpers\Inflector;
 use yii\widgets\InputWidget;
 
 /**
