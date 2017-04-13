@@ -80,6 +80,12 @@ class ReCaptcha extends InputWidget
 
     /** @var array Additional html widget options, such as `class`. */
     public $widgetOptions = [];
+    
+    public function init()
+    {
+        $view = $this->view;
+        $view->registerJs($this->render('onload'), $view::POS_BEGIN);
+    }
 
     public function run()
     {
@@ -93,13 +99,24 @@ class ReCaptcha extends InputWidget
             }
         }
 
+        $arguments = http_build_query([
+            'hl' => $this->getLanguageSuffix(),
+            'render' => 'explicit',
+            'onload' => 'recaptchaOnloadCallback',
+        ]);
+        
         $view = $this->view;
         $view->registerJsFile(
-            self::JS_API_URL . '?hl=' . $this->getLanguageSuffix(),
-            ['position' => $view::POS_HEAD, 'async' => true, 'defer' => true]
+            self::JS_API_URL . '?' . $arguments,
+            ['position' => $view::POS_END, 'async' => true, 'defer' => true]
         );
 
         $this->customFieldPrepare();
+        echo Html::tag('div', '', $this->buildDivOptions());
+    }
+ 
+    protected function buildDivOptions()
+    {
 
         $divOptions = [
             'class' => 'g-recaptcha',
@@ -128,9 +145,26 @@ class ReCaptcha extends InputWidget
         if (isset($this->widgetOptions['class'])) {
             $divOptions['class'] = "{$divOptions['class']} {$this->widgetOptions['class']}";
         }
-        $divOptions = $divOptions + $this->widgetOptions;
+        
+        // The id attribute required for explicit reCaptcha initialization
+        $divOptions['id'] = $this->getReCaptchaId();
 
-        echo Html::tag('div', '', $divOptions);
+        $divOptions = $divOptions + $this->widgetOptions;
+ 
+        return $divOptions;
+    }
+    
+    protected function getReCaptchaId()
+    {
+        if (isset($this->widgetOptions['id'])) {
+            return $this->widgetOptions['id'];
+        }
+
+        if ($this->hasModel()) {
+            return $this->model->formName() . '-recaptcha';
+        } else {
+            return $this->name . '-recaptcha';
+        }
     }
 
     protected function getLanguageSuffix()
@@ -154,18 +188,30 @@ class ReCaptcha extends InputWidget
         $view = $this->view;
         if ($this->hasModel()) {
             $inputName = Html::getInputName($this->model, $this->attribute);
-            $inputId = Html::getInputId($this->model, $this->attribute);
+            //$inputId = Html::getInputId($this->model, $this->attribute);
         } else {
             $inputName = $this->name;
-            $inputId = 'recaptcha-' . $this->name;
+            //$inputId = 'recaptcha-' . $this->name;
         }
 
-        if (empty($this->jsCallback)) {
-            $jsCode = "var recaptchaCallback = function(response){jQuery('#{$inputId}').val(response);};";
-        } else {
-            $jsCode = "var recaptchaCallback = function(response){jQuery('#{$inputId}').val(response); {$this->jsCallback}(response);};";
-        }
-        $this->jsCallback = 'recaptchaCallback';
+//        if (empty($this->jsCallback)) {
+//            $jsCode = "var recaptchaCallback = function(response){jQuery('#{$inputId}').val(response);};";
+//        } else {
+//            $jsCode = "var recaptchaCallback = function(response){jQuery('#{$inputId}').val(response); {$this->jsCallback}(response);};";
+//        }
+//        $this->jsCallback = 'recaptchaCallback';
+        
+        $inputId = $this->getReCaptchaId() . '-input';
+
+        $verifyCallbackName = lcfirst(Inflector::id2camel($inputId)) . 'Callback';
+
+        $jsCode = $this->render('verify', [
+            'verifyCallbackName' => $verifyCallbackName,
+            'jsCallback' => $this->jsCallback,
+            'inputId' => $inputId,
+        ]);
+
+        $this->jsCallback = $verifyCallbackName;
 
         if (empty($this->jsExpiredCallback)) {
             $jsExpCode = "var recaptchaExpiredCallback = function(){jQuery('#{$inputId}').val('');};";
